@@ -1,0 +1,16 @@
+"comparison","agreement"
+"rater1 vs rater2",0.698443579766537
+"rater1 vs rater3",0.56420233463035
+"rater1 vs rater4",0.669260700389105
+"rater1 vs rater5",0.408560311284047
+"rater1 vs ml",0.490234375
+"rater2 vs rater3",0.455252918287938
+"rater2 vs rater4",0.595330739299611
+"rater2 vs rater5",0.303501945525292
+"rater2 vs ml",0.44921875
+"rater3 vs rater4",0.583657587548638
+"rater3 vs rater5",0.490272373540856
+"rater3 vs ml",0.4140625
+"rater4 vs rater5",0.385214007782101
+"rater4 vs ml",0.51953125
+"rater5 vs ml",0.349609375

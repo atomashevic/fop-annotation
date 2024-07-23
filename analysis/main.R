@@ -96,15 +96,30 @@ kappa_results <- data.frame(
 raters <- c("rater1", "rater2", "rater3", "rater4", "rater5", "ml")
 for (i in 1:(length(raters) - 1)) {
   for (j in (i + 1):length(raters)) {
-    kappa <- calculate_cohens_kappa(combined_data[[raters[i]]], combined_data[[raters[j]]])
-    kappa_results <- rbind(kappa_results, data.frame(comparison = paste(raters[i], "vs", raters[j]), kappa = kappa))
+    kappa <- calculate_cohens_kappa(
+      combined_data[[raters[i]]], combined_data[[raters[j]]]
+    )
+    kappa_results <- rbind(
+      kappa_results,
+      data.frame(comparison = paste(raters[i], "vs", raters[j]), kappa = kappa)
+    )
   }
 }
 
+write.csv(kappa_results, "results/main_kappa_results.csv", row.names = FALSE)
+
 # Calculate Fleiss' Kappa
-fleiss_kappa <- kappam.fleiss(combined_data[, c("rater1", "rater2", "rater3", "rater4", "rater5", "ml")])
+fleiss_kappa <- kappam.fleiss(combined_data[, c(
+  "rater1",
+  "rater2",
+  "rater3",
+  "rater4",
+  "rater5",
+  "ml"
+)])
 
 fleiss_kappa
+
 # Calculate percent agreement
 calculate_percent_agreement <- function(rater1, rater2) {
   sum(rater1 == rater2, na.rm = TRUE) / sum(!is.na(rater1) & !is.na(rater2))
@@ -136,6 +151,11 @@ for (i in 1:(length(raters) - 1)) {
   }
 }
 
+write.csv(percent_agreement_results,
+  "results/main_percent_agreement_results.csv",
+  row.names = FALSE
+)
+
 # Calculate overall percent agreement
 overall_agreement <- mean(sapply(1:nrow(combined_data), function(i) {
   length(unique(unlist(combined_data[i, c(
@@ -149,15 +169,26 @@ overall_agreement <- mean(sapply(1:nrow(combined_data), function(i) {
 }), na.rm = TRUE)
 
 # Visualize pairwise Cohen's Kappa
-kappa_plot <- ggplot(kappa_results, aes(x = comparison, y = kappa)) +
-  geom_bar(stat = "identity", fill = "skyblue") +
+kappa_plot <- ggplot(kappa_results, aes(x = reorder(comparison, -kappa), y = kappa)) +
+  geom_bar(stat = "identity", fill = "skyblue", width = 0.7) +
+  geom_text(aes(label = round(kappa, 2)), vjust = -0.5, size = 3) +
   theme_minimal() +
   labs(
     title = "Pairwise Cohen's Kappa",
+    subtitle = "Agreement Between Raters",
     x = "Rater Comparison",
     y = "Kappa Value"
   ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(face = "italic", size = 12),
+    axis.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+  ) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  coord_cartesian(ylim = c(0, max(kappa_results$kappa) * 1.1))
 
 kappa_plot
 save_plot(kappa_plot, "pairwise_cohens_kappa")
@@ -166,16 +197,33 @@ save_plot(kappa_plot, "pairwise_cohens_kappa")
 percent_agreement_plot <-
   ggplot(
     percent_agreement_results,
-    aes(x = comparison, y = agreement)
+    aes(x = reorder(comparison, -agreement), y = agreement)
   ) +
-  geom_bar(stat = "identity", fill = "lightgreen") +
+  geom_bar(stat = "identity", fill = "skyblue", width = 0.7) +
+  geom_text(aes(label = sprintf("%.2f%%", agreement * 100)),
+    vjust = -0.5, size = 3
+  ) +
   theme_minimal() +
   labs(
     title = "Pairwise Percent Agreement",
+    subtitle = "Agreement Between Raters",
     x = "Rater Comparison",
     y = "Percent Agreement"
   ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(face = "italic", size = 12),
+    axis.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    limits = c(0, 1)
+  ) +
+  coord_cartesian(ylim = c(0, max(percent_agreement_results$agreement) * 1.1))
+
 save_plot(percent_agreement_plot, "pairwise_percent_agreement")
 
 # Print results
