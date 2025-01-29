@@ -1,8 +1,8 @@
-dfer==22.5.1
-tensorflow>=2.4.0
+fer==22.5.1
+tf-nightly
 opencv-python>=4.5.0
-moviepy>=1.0.3
+moviepy==1.0.3
 numpy>=1.19.0
 pandas>=1.2.0
 tqdm>=4.60.0
-imageio==2.4.1 
+imageio>=2.5.0,<3.0 
