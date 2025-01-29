@@ -12,15 +12,31 @@ preprocess_human_data <- function(data) {
 
 # Function to preprocess ML data
 preprocess_ml_data <- function(data) {
-  data %>%
-    mutate(label = case_when(
-      outcome == "PS" ~ "Positive Emotion",
-      outcome == "NG" ~ "Negative Emotion",
-      outcome == "NT" ~ "Neutral Expression",
-      outcome == "NO" ~ "No face",
-      TRUE ~ NA_character_
-    )) %>%
-    select(image_name, label)
+  if ("outcome" %in% names(data)) {
+    # For models that use the 'outcome' column
+    data %>%
+      mutate(label = case_when(
+        outcome == "PS" ~ "Positive Emotion",
+        outcome == "NG" ~ "Negative Emotion",
+        outcome == "NT" ~ "Neutral Expression",
+        outcome == "NO" ~ "No face",
+        TRUE ~ NA_character_
+      )) %>%
+      select(image_name, label)
+  } else if ("label" %in% names(data)) {
+    # For models that already have a 'label' column
+    data %>%
+      mutate(label = case_when(
+        label == "Positive Emotion" ~ "Positive Emotion",
+        label == "Negative Emotion" ~ "Negative Emotion",
+        label == "Neutral Expression" ~ "Neutral Expression",
+        label == "No face" ~ "No face",
+        TRUE ~ NA_character_
+      )) %>%
+      select(image_name, label)
+  } else {
+    stop("Unexpected data format: neither 'outcome' nor 'label' column found")
+  }
 }
 
 # Function to calculate F1 score
@@ -45,8 +61,23 @@ data3 <- read.csv("results/C3.csv") %>% preprocess_human_data()
 data4 <- read.csv("results/C4.csv") %>% preprocess_human_data()
 data5 <- read.csv("results/C5.csv") %>% preprocess_human_data()
 
-# Read and preprocess the ML algorithm CSV file
-ml <- read.csv("results/ML.csv") %>% preprocess_ml_data()
+# Read and preprocess the ML algorithm CSV files
+ml_models <- c("CLIP-1", "CLIP-2", "CLIP-1-emotion", "CLIP-emotion", "CNN-fer", 
+               "CNN-strong-org", "CNN-strong", "CNN-weak", "CNN-weak-org")
+
+ml_data <- list()
+for (model in ml_models) {
+  tryCatch({
+    ml_data[[model]] <- read.csv(paste0("results/", model, ".csv")) %>% preprocess_ml_data()
+  }, error = function(e) {
+    warning(paste("Error processing", model, ":", e$message))
+    ml_data[[model]] <- NULL
+  })
+}
+
+# Remove any NULL entries from ml_data
+ml_data <- ml_data[!sapply(ml_data, is.null)]
+ml_models <- names(ml_data)
 
 # Combine the data into a single dataframe
 combined_data <- data1 %>%
@@ -55,29 +86,30 @@ combined_data <- data1 %>%
   left_join(data2 %>% select(image_name, label) %>% rename(rater2 = label), by = "image_name") %>%
   left_join(data3 %>% select(image_name, label) %>% rename(rater3 = label), by = "image_name") %>%
   left_join(data4 %>% select(image_name, label) %>% rename(rater4 = label), by = "image_name") %>%
-  left_join(data5 %>% select(image_name, label) %>% rename(rater5 = label), by = "image_name") %>%
-  left_join(ml %>% rename(ml = label), by = "image_name")
+  left_join(data5 %>% select(image_name, label) %>% rename(rater5 = label), by = "image_name")
 
-# Filter cases where all raters agree a face is present
+# Add ML model predictions to the combined data
+for (model in ml_models) {
+  combined_data <- combined_data %>%
+    left_join(ml_data[[model]] %>% rename(!!model := label), by = "image_name")
+}
+
+# Filter cases where all raters and ML models agree a face is present
 face_agreement_data <- combined_data %>%
   filter(
     rater1 != "No face" &
-      rater2 != "No face" &
-      rater3 != "No face" &
-      rater4 != "No face" &
-      rater5 != "No face" &
-      ml != "No face"
+    rater2 != "No face" &
+    rater3 != "No face" &
+    rater4 != "No face" &
+    rater5 != "No face" &
+    if_all(all_of(ml_models), ~ . != "No face")
   )
 
 # Update the consensus methods calculation
 face_agreement_data <- face_agreement_data %>%
   rowwise() %>%
   mutate(
-    human_consensus_all = if (length(unique(c(
-      rater1,
-      rater2,
-      rater3, rater4, rater5
-    ))) == 1) {
+    human_consensus_all = if (length(unique(c(rater1, rater2, rater3, rater4, rater5))) == 1) {
       rater1
     } else {
       NA_character_
@@ -119,7 +151,7 @@ calculate_metrics <- function(human_consensus, ml_labels) {
   )
 }
 
-# Compare different human consensus methods with ML
+# Compare different human consensus methods with each ML model
 consensus_methods <- c(
   "human_consensus_all",
   "human_consensus_majority",
@@ -128,6 +160,7 @@ consensus_methods <- c(
 
 consensus_comparison <- data.frame(
   method = character(),
+  model = character(),
   agreement = numeric(),
   kappa = numeric(),
   f1_score = numeric(),
@@ -136,75 +169,61 @@ consensus_comparison <- data.frame(
 )
 
 for (method in consensus_methods) {
-  metrics <- calculate_metrics(
-    face_agreement_data[[method]],
-    face_agreement_data$ml
-  )
-
-  consensus_comparison <- rbind(
-    consensus_comparison,
-    data.frame(
-      method = method,
-      agreement = metrics$agreement,
-      kappa = metrics$kappa,
-      f1_score = metrics$f1_score,
-      valid_cases = metrics$valid_cases
+  for (model in ml_models) {
+    metrics <- calculate_metrics(
+      face_agreement_data[[method]],
+      face_agreement_data[[model]]
     )
-  )
 
-  cat("\nMetrics for", method, "vs ML (Face Agreement Cases):\n")
-  print(metrics$confusion_matrix)
-  cat("Agreement:", metrics$agreement, "\n")
-  cat("Kappa:", metrics$kappa, "\n")
-  cat("F1 Score:", metrics$f1_score, "\n")
-  cat("Valid cases:", metrics$valid_cases, "\n")
+    consensus_comparison <- rbind(
+      consensus_comparison,
+      data.frame(
+        method = method,
+        model = model,
+        agreement = metrics$agreement,
+        kappa = metrics$kappa,
+        f1_score = metrics$f1_score,
+        valid_cases = metrics$valid_cases
+      )
+    )
 
-  # Calculate and print precision and recall for each class
-  precision <- diag(metrics$confusion_matrix) /
-    colSums(metrics$confusion_matrix)
-  recall <- diag(metrics$confusion_matrix) / rowSums(metrics$confusion_matrix)
+    cat("\nMetrics for", method, "vs", model, "(Face Agreement Cases):\n")
+    print(metrics$confusion_matrix)
+    cat("Agreement:", metrics$agreement, "\n")
+    cat("Kappa:", metrics$kappa, "\n")
+    cat("F1 Score:", metrics$f1_score, "\n")
+    cat("Valid cases:", metrics$valid_cases, "\n")
 
-  cat("Precision by class:\n")
-  print(precision)
+    # Calculate and print precision and recall for each class
+    precision <- diag(metrics$confusion_matrix) / colSums(metrics$confusion_matrix)
+    recall <- diag(metrics$confusion_matrix) / rowSums(metrics$confusion_matrix)
 
-  cat("Recall by class:\n")
-  print(recall)
+    cat("Precision by class:\n")
+    print(precision)
+
+    cat("Recall by class:\n")
+    print(recall)
+  }
 }
 
-cat("\nComparison of Human Consensus Methods with ML (Face Agreement Cases):\n")
+cat("\nComparison of Human Consensus Methods with ML Models (Face Agreement Cases):\n")
 print(consensus_comparison)
 
-# Visualize comparison of human consensus methods with ML
-consensus_comparison_plot <-
-  ggplot(consensus_comparison, aes(x = method)) +
-  geom_bar(
-    aes(y = agreement, fill = "Agreement"),
-    stat = "identity", position = position_dodge()
-  ) +
-  geom_bar(
-    aes(y = kappa, fill = "Kappa"),
-    stat = "identity", position = position_dodge()
-  ) +
-  geom_bar(
-    aes(y = f1_score, fill = "F1 Score"),
-    stat = "identity", position = position_dodge()
-  ) +
+# Visualize comparison of human consensus methods with ML models
+consensus_comparison_plot <- ggplot(consensus_comparison, aes(x = method, y = agreement, fill = model)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
   theme_minimal() +
   labs(
-    title = "Comparison of Human Consensus Methods
-    with ML (Face Agreement Cases)",
-    x = "Consensus Method", y = "Score"
+    title = "Comparison of Human Consensus Methods with ML Models (Face Agreement Cases)",
+    x = "Consensus Method", y = "Agreement"
   ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_fill_manual(values = c(
-    "Agreement" = "purple", "Kappa" = "pink", "F1 Score" = "orange"
-  ))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 save_plot(consensus_comparison_plot, "emotion_consensus_comparison")
 
 # Analyze emotion label distribution
 emotion_distribution <- face_agreement_data %>%
   pivot_longer(
-    cols = c("rater1", "rater2", "rater3", "rater4", "rater5", "ml"),
+    cols = c("rater1", "rater2", "rater3", "rater4", "rater5", all_of(ml_models)),
     names_to = "rater", values_to = "emotion"
   ) %>%
   group_by(rater, emotion) %>%
@@ -217,10 +236,11 @@ emotion_distribution_plot <-
   geom_bar(stat = "identity", position = "stack") +
   theme_minimal() +
   labs(
-    title = "Emotion Label Distribution by Rater (Face Agreement Cases)",
-    x = "Rater", y = "Percentage"
+    title = "Emotion Label Distribution by Rater and ML Model (Face Agreement Cases)",
+    x = "Rater/Model", y = "Percentage"
   ) +
-  scale_fill_brewer(palette = "Set3")
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 save_plot(emotion_distribution_plot, "emotion_label_distribution")
 
 # Calculate pairwise Cohen's Kappa for emotion labels
@@ -234,7 +254,7 @@ emotion_kappa_results <- data.frame(
   stringsAsFactors = FALSE
 )
 
-raters <- c("rater1", "rater2", "rater3", "rater4", "rater5", "ml")
+raters <- c("rater1", "rater2", "rater3", "rater4", "rater5", ml_models)
 for (i in 1:(length(raters) - 1)) {
   for (j in (i + 1):length(raters)) {
     kappa <- calculate_cohens_kappa(
@@ -258,33 +278,19 @@ emotion_kappa_plot <-
   theme_minimal() +
   labs(
     title = "Pairwise Cohen's Kappa for Emotion Labels (Face Agreement Cases)",
-    x = "Rater Comparison", y = "Kappa Value"
+    x = "Rater/Model Comparison", y = "Kappa Value"
   ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 save_plot(emotion_kappa_plot, "emotion_pairwise_kappa")
 
 # Calculate Fleiss' Kappa for emotion labels
-emotion_fleiss_kappa <- kappam.fleiss(
-  face_agreement_data[, c(
-    "rater1",
-    "rater2",
-    "rater3",
-    "rater4",
-    "rater5",
-    "ml"
-  )]
-)
-cat(
-  "\nFleiss' Kappa for Emotion Labels (Face Agreement Cases):",
-  emotion_fleiss_kappa$value, "\n"
-)
+emotion_fleiss_kappa <- kappam.fleiss(face_agreement_data[, c("rater1", "rater2", "rater3", "rater4", "rater5", ml_models)])
+cat("\nFleiss' Kappa for Emotion Labels (Face Agreement Cases):", emotion_fleiss_kappa$value, "\n")
 
 cat("\nSample data for verification (Face Agreement Cases):\n")
 print(face_agreement_data %>%
-  select(
-    rater1, rater2, rater3, rater4, rater5, ml,
-    human_consensus_all, human_consensus_majority, human_consensus_any2
-  ) %>%
+  select(rater1, rater2, rater3, rater4, rater5, all_of(ml_models),
+         human_consensus_all, human_consensus_majority, human_consensus_any2) %>%
   head(20))
 
 # Print summary of consensus methods
