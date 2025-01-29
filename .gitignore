@@ -1,3 +1,81 @@
 # models folder
 models/
 notes.md
+
+# MAFW Dataset files
+data/mafw/videos/
+data/mafw/annotations/
+*.mp4
+*.avi
+*.mov
+*.gif
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+*.log
+logs/
+debug.log
+fer_analysis.log
+
+# MAFW Data and Results
+data/mafw/
+data/mafw_sample/
+results/fer_analysis/
+results/fer_analysis_debug/
+
+# Temporary files
+temp/
+temp_debug/
+output/
+*.zip
+*.mp4
+*.avi
+*.mov
+
+# Video lists
+all_videos.txt
+selected_videos.txt
+sample_videos.txt
+
+# R
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+.Rproj.user/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# scripts related to MAFW dataset
+create_mafw_sample.sh
