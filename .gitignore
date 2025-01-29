@@ -42,7 +42,6 @@ fer_analysis.log
 # MAFW Data and Results
 data/mafw/
 data/mafw_sample/
-results/fer_analysis/
 results/fer_analysis_debug/
 
 # Temporary files

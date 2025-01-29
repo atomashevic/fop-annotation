@@ -1,0 +1,2 @@
+,box0,angry0,disgust0,fear0,happy0,sad0,surprise0,neutral0,video_id,total_frames,sampling_freq,target_frames,actual_frames,fps,duration,timestamp
+0,"[536, 89, 388, 504]",0.09,0.0,0.08,0.01,0.72,0.01,0.09,video_0079,125,3,50,41,25.0,5.0,2025-01-29T20:07:30.630782
